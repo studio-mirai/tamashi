@@ -5,6 +5,7 @@ use sui::clock::Clock;
 use sui::derived_object::claim;
 use sui::display;
 use sui::package;
+use sui::transfer::Receiving;
 use tamashi::constants::{addresses, descriptions};
 use tamashi::image_variant::ImageVariant;
 
@@ -29,6 +30,7 @@ public struct TamashiRegistry has key {
 
 public enum TamashiState has copy, drop, store {
     Unnamed,
+    // (namer_address, naming_timestamp)
     Named(address, u64),
 }
 
@@ -136,6 +138,10 @@ public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut T
         },
         TamashiState::Named(..) => abort EAlreadyNamed,
     }
+}
+
+public fun receive<T: key + store>(self: &mut Tamashi, obj_to_receive: Receiving<T>): T {
+    transfer::public_receive(&mut self.id, obj_to_receive)
 }
 
 //=== Public View Functions ===
