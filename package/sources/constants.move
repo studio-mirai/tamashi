@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: CC-BY-NC-ND-4.0
 // © 2025 Studio Mirai. Narrative content licensed separately under CC BY-NC-ND 4.0.
-
 module tamashi::constants;
 
 use std::string::String;
