@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: CC-BY-NC-4.0
 // © 2025 Studio Mirai. Non-commercial use only.
-
 module tamashi::tamashi;
 
 use std::string::String;
 use sui::clock::Clock;
 use sui::derived_object::claim;
 use sui::display;
+use sui::event::emit;
 use sui::package;
 use sui::transfer::Receiving;
 use tamashi::constants::{
@@ -37,10 +37,24 @@ public struct TamashiRegistry has key {
     id: UID,
 }
 
+//=== Enums ===
+
 public enum TamashiState has copy, drop, store {
     Unnamed,
     // (namer_address, naming_timestamp)
     Named(address, u64),
+}
+
+//=== Events ===
+
+public struct TamashiImageSeriesSetEvent has copy, drop {
+    tamashi_id: ID,
+    image_series_id: ID,
+}
+
+public struct TamashiNameSetEvent has copy, drop {
+    tamashi_id: ID,
+    name: String,
 }
 
 //=== Constants ===
@@ -123,7 +137,7 @@ fun init(otw: TAMASHI, ctx: &mut TxContext) {
         transfer::public_transfer(tamashi, migrated_by);
     });
 
-    transfer::public_transfer(display, sender);
+    transfer::public_transfer(display, @admin);
 
     transfer::freeze_object(registry);
 
@@ -137,6 +151,11 @@ public fun set_image_series(self: &mut Tamashi, image_series: &ImageSeries) {
     image_series.assert_is_eligible_tamashi(self.number);
     self.image_name = image_series.name();
     self.image_quilt_id = image_series.quilt_id();
+
+    emit(TamashiImageSeriesSetEvent {
+        tamashi_id: self.id.to_inner(),
+        image_series_id: image_series.id(),
+    });
 }
 
 public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut TxContext) {
@@ -144,6 +163,11 @@ public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut T
         TamashiState::Unnamed => {
             self.name = name;
             self.state = TamashiState::Named(ctx.sender(), clock.timestamp_ms());
+
+            emit(TamashiNameSetEvent {
+                tamashi_id: self.id.to_inner(),
+                name,
+            });
         },
         TamashiState::Named(..) => abort EAlreadyNamed,
     }
@@ -151,11 +175,6 @@ public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut T
 
 public fun receive<T: key + store>(self: &mut Tamashi, obj_to_receive: Receiving<T>): T {
     transfer::public_receive(&mut self.id, obj_to_receive)
-}
-
-public fun destroy(self: Tamashi) {
-    let Tamashi { id, .. } = self;
-    id.delete();
 }
 
 //=== Public View Functions ===

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: CC-BY-NC-4.0
 // © 2025 Studio Mirai. Non-commercial use only.
-
 module tamashi::image_series;
 
 use std::string::String;
