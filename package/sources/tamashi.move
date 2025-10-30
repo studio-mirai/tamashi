@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC-BY-NC-4.0
+// © 2025 Studio Mirai. Non-commercial use only.
+
 module tamashi::tamashi;
 
 use std::string::String;
@@ -6,8 +9,14 @@ use sui::derived_object::claim;
 use sui::display;
 use sui::package;
 use sui::transfer::Receiving;
-use tamashi::constants::{addresses, descriptions};
-use tamashi::image_variant::ImageVariant;
+use tamashi::constants::{
+    collection_size,
+    descriptions,
+    default_image_name,
+    default_image_quilt_id,
+    migration_addresses
+};
+use tamashi::image_series::ImageSeries;
 
 //=== Structs ===
 
@@ -19,9 +28,9 @@ public struct Tamashi has key, store {
     number: u8,
     name: String,
     description: String,
-    image_quilt_id: String,
     image_name: String,
-    migrator: address,
+    image_quilt_id: String,
+    migrated_by: address,
 }
 
 public struct TamashiRegistry has key {
@@ -36,9 +45,6 @@ public enum TamashiState has copy, drop, store {
 
 //=== Constants ===
 
-const COLLECTION_SIZE: u8 = 100;
-const DEFAULT_IMAGE_QUILT_ID: vector<u8> = b"hAKUrbgRtn63UDGulNOWIGicUgt_kwkAkwCjcvYhxlY";
-const DEFAULT_IMAGE_NAME: vector<u8> = b"ORIGINAL";
 const DISPLAY_KEYS: vector<vector<u8>> = vector[
     b"number",
     b"name",
@@ -46,7 +52,7 @@ const DISPLAY_KEYS: vector<vector<u8>> = vector[
     b"image_name",
     b"image_uri",
     b"image_url",
-    b"migrator",
+    b"migrated_by",
 ];
 const DISPLAY_VALUES: vector<vector<u8>> = vector[
     b"{number}",
@@ -55,7 +61,7 @@ const DISPLAY_VALUES: vector<vector<u8>> = vector[
     b"{image_name}",
     b"{image_quilt_id}/{number}.webp",
     b"https://aggregator.mainnet.walrus.mirai.cloud/v1/blobs/by-quilt-id/{image_quilt_id}/{number}.webp",
-    b"{migrator}",
+    b"{migrated_by}",
 ];
 
 //=== Errors ===
@@ -78,13 +84,13 @@ fun init(otw: TAMASHI, ctx: &mut TxContext) {
     );
     display.update_version();
 
-    let mut addresses = addresses!();
-    assert!(addresses.length() == COLLECTION_SIZE as u64, EInvalidAddressesCount);
     let mut descriptions = descriptions!();
-    assert!(descriptions.length() == COLLECTION_SIZE as u64, EInvalidDescriptionsCount);
+    assert!(descriptions.length() == collection_size!() as u64, EInvalidDescriptionsCount);
+    let mut migration_addresses = migration_addresses!();
+    assert!(migration_addresses.length() == collection_size!() as u64, EInvalidAddressesCount);
 
-    addresses.reverse();
     descriptions.reverse();
+    migration_addresses.reverse();
 
     // Create the TamashiRegistry to use as a parent for deriving addresses.
     let mut registry = TamashiRegistry {
@@ -92,17 +98,17 @@ fun init(otw: TAMASHI, ctx: &mut TxContext) {
     };
 
     let name_base = b"Tamashi #".to_string();
-    let image_name = DEFAULT_IMAGE_NAME.to_string();
-    let image_quilt_id = DEFAULT_IMAGE_QUILT_ID.to_string();
+    let image_name = default_image_name!().to_string();
+    let image_quilt_id = default_image_quilt_id!().to_string();
 
     let sender = ctx.sender();
 
-    COLLECTION_SIZE.do!(|idx| {
+    collection_size!().do!(|idx| {
         let number = idx + 1;
         // Build the name string.
         let mut name = name_base;
         name.append(number.to_string());
-        let migrator = addresses.pop_back();
+        let migrated_by = migration_addresses.pop_back();
         // Create and transfer the Tamashi.
         let tamashi = Tamashi {
             id: claim(&mut registry.id, number),
@@ -112,22 +118,25 @@ fun init(otw: TAMASHI, ctx: &mut TxContext) {
             description: descriptions.pop_back(),
             image_name,
             image_quilt_id,
-            migrator,
+            migrated_by,
         };
-        transfer::public_transfer(tamashi, migrator);
+        transfer::public_transfer(tamashi, migrated_by);
     });
 
-    transfer::public_transfer(publisher, sender);
     transfer::public_transfer(display, sender);
 
-    transfer::share_object(registry);
+    transfer::freeze_object(registry);
+
+    // Destroy the Publisher, yikes!
+    publisher.burn();
 }
 
 //=== Public Functions ===
 
-public fun set_image_variant(self: &mut Tamashi, image_variant: &ImageVariant) {
-    self.image_name = image_variant.name();
-    self.image_quilt_id = image_variant.quilt_id();
+public fun set_image_series(self: &mut Tamashi, image_series: &ImageSeries) {
+    image_series.assert_is_eligible_tamashi(self.number);
+    self.image_name = image_series.name();
+    self.image_quilt_id = image_series.quilt_id();
 }
 
 public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut TxContext) {
@@ -142,6 +151,11 @@ public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut T
 
 public fun receive<T: key + store>(self: &mut Tamashi, obj_to_receive: Receiving<T>): T {
     transfer::public_receive(&mut self.id, obj_to_receive)
+}
+
+public fun destroy(self: Tamashi) {
+    let Tamashi { id, .. } = self;
+    id.delete();
 }
 
 //=== Public View Functions ===
@@ -170,6 +184,6 @@ public fun image_quilt_id(self: &Tamashi): String {
     self.image_quilt_id
 }
 
-public fun migrator(self: &Tamashi): address {
-    self.migrator
+public fun migrated_by(self: &Tamashi): address {
+    self.migrated_by
 }
