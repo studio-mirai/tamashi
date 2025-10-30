@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC-BY-NC-4.0
+// © 2025 Studio Mirai. Non-commercial use only.
+
 module tamashi::image_series;
 
 use std::string::String;
@@ -17,8 +20,6 @@ public struct ImageSeries has key {
     eligible_tamashi: vector<u8>,
 }
 
-public struct ImageSeriesKey(String) has copy, drop, store;
-
 public struct ImageSeriesRegistry has key {
     id: UID,
 }
@@ -26,6 +27,7 @@ public struct ImageSeriesRegistry has key {
 //=== Errors ===
 
 const EIneligibleTamashi: u64 = 0;
+const EInvalidTamashiNumber: u64 = 1;
 
 //=== Init Function ===
 
@@ -90,8 +92,10 @@ fun new_impl(
     eligible_tamashi: vector<u8>,
     registry: &mut ImageSeriesRegistry,
 ): ImageSeries {
+    eligible_tamashi.do!(|n| assert!(n >= 1 && n <= collection_size!(), EInvalidTamashiNumber));
+
     ImageSeries {
-        id: claim(&mut registry.id, ImageSeriesKey(name)),
+        id: claim(&mut registry.id, name),
         name,
         quilt_id,
         eligible_tamashi: vec_set::from_keys(eligible_tamashi).into_keys(),

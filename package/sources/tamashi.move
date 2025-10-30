@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC-BY-NC-4.0
+// © 2025 Studio Mirai. Non-commercial use only.
+
 module tamashi::tamashi;
 
 use std::string::String;
@@ -25,8 +28,8 @@ public struct Tamashi has key, store {
     number: u8,
     name: String,
     description: String,
-    image_quilt_id: String,
     image_name: String,
+    image_quilt_id: String,
     migrated_by: address,
 }
 
@@ -120,10 +123,12 @@ fun init(otw: TAMASHI, ctx: &mut TxContext) {
         transfer::public_transfer(tamashi, migrated_by);
     });
 
-    transfer::public_transfer(publisher, sender);
     transfer::public_transfer(display, sender);
 
-    transfer::share_object(registry);
+    transfer::freeze_object(registry);
+
+    // Destroy the Publisher, yikes!
+    publisher.burn();
 }
 
 //=== Public Functions ===
@@ -146,6 +151,11 @@ public fun set_name(self: &mut Tamashi, name: String, clock: &Clock, ctx: &mut T
 
 public fun receive<T: key + store>(self: &mut Tamashi, obj_to_receive: Receiving<T>): T {
     transfer::public_receive(&mut self.id, obj_to_receive)
+}
+
+public fun destroy(self: Tamashi) {
+    let Tamashi { id, .. } = self;
+    id.delete();
 }
 
 //=== Public View Functions ===

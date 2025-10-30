@@ -2,3 +2,5 @@ build/*
 .trace
 .coverage*
 .DS_Store
+.env
+node_modules/
